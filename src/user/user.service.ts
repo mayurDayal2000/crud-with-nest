@@ -1,41 +1,30 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-type UserType = {
-  id: number;
-  username: string;
-  type: string;
-};
+import { InjectRepository } from '@nestjs/typeorm';
+import { User } from './entities/user.entity';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class UserService {
-  private users: UserType[] = [
-    {
-      id: 1,
-      username: 'mayurDayal',
-      type: 'admin',
-    },
-    {
-      id: 2,
-      username: 'captAmerica',
-      type: 'user',
-    },
-  ];
+  constructor(
+    @InjectRepository(User)
+    private users: Repository<User>,
+  ) {}
 
-  findAllUser(type?: 'admin') {
+  async findAllUser(type?: 'admin'): Promise<User[]> {
     // returns admin
     if (type) {
-      return this.users.filter((user) => user.type === type);
+      return this.users.find({ where: { type } });
     }
 
     // returns all user
-    return this.users;
+    return this.users.find();
   }
 
-  findSelectedUser(id: number) {
+  async findSelectedUser(id: number): Promise<User> {
     // returns selected user
-    const userFound = this.users.find((user) => user.id === id);
+    const userFound = await this.users.findOneBy({ id });
 
     if (!userFound) {
       throw new NotFoundException('No user found!');
@@ -44,35 +33,31 @@ export class UserService {
     return userFound;
   }
 
-  createUser(createUserDto: CreateUserDto) {
+  async createUser(createUserDto: CreateUserDto): Promise<User> {
     // adds a new user
-
-    const newUser = { ...createUserDto, id: this.users.length + 1 };
-
-    this.users.push(newUser);
-
-    return newUser;
+    const newUser = this.users.create(createUserDto);
+    return this.users.save(newUser);
   }
 
-  updateUser(id: number, updateUserDto: UpdateUserDto) {
+  async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<User> {
     // updates existing user
-    this.users = this.users.map((user) => {
-      if (user.id === id) {
-        return { ...user, ...updateUserDto };
-      }
-
-      return user;
+    const userFound = await this.users.preload({
+      id,
+      ...updateUserDto,
     });
 
-    return this.findSelectedUser(id);
+    if (!userFound) {
+      throw new NotFoundException('No user found!');
+    }
+
+    return this.users.save(userFound);
   }
 
-  removeUser(id: number) {
+  async removeUser(id: number): Promise<string> {
     // removes existing user
-    const removedUser = this.findSelectedUser(id).username;
+    const user = await this.findSelectedUser(id);
+    await this.users.delete(id);
 
-    this.users = this.users.filter((user) => user.id !== id);
-
-    return `${removedUser} has been removed`;
+    return `${user.username} has been removed`;
   }
 }
